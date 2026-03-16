@@ -4,23 +4,330 @@ format: html
 editor: visual
 ---
 
-## Quarto
-
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
-
-## Running Code
-
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
 
 ```{r}
-1 + 1
+library(tidyverse)
+
+df <- read_csv("Students Social Media Addiction.csv")
+
+df <- df|>
+  select(Student_ID, Academic_Level, Gender, Avg_Daily_Usage_Hours, Sleep_Hours_Per_Night, Mental_Health_Score, Addicted_Score) |>
+  mutate(Academic_Level = as.factor(Academic_Level),
+         Gender = as.factor(Gender)
+         )
+
+head(df)
 ```
 
-You can add options to executable code like this
+## Research Question 1:
+
+Do daily usage hours, sleep duration, mental health score, and addiction score jointly 
+differ across academic levels?
+
+### Hypothesis
+
+H0: μ1(vector) = μ2(vector) = μ3(vector)
+
+HA: At least two μj(vector) differ
+
+μj = | True mean Avg_Daily_Usage_Hours   for academic level j |
+     | True mean Sleep_Hours_Per_Night   for academic level j |
+     | True mean Mental_Health_Score     for academic level j |
+     | True mean Addicted_Score          for academic level j |
+
+j = High School, Undergraduate, Graduate
+
+### MANOVA Test
 
 ```{r}
-#| echo: false
-2 * 2
+manova_fit <- manova(
+  cbind(
+    Avg_Daily_Usage_Hours,
+    Sleep_Hours_Per_Night,
+    Mental_Health_Score,
+    Addicted_Score
+  ) ~ Academic_Level,
+  data = df
+)
+
+summary(manova_fit, test = "Wilks")
+summary(manova_fit, test = "Pillai")
+summary(manova_fit, test = "Hotelling-Lawley")
+summary(manova_fit, test = "Roy")
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+Based on the MANOVA results (e.g., Wilks’ Lambda / Pillai’s Trace, etc.), the approximate F values corresponding to the test statistics are all large resulting in small p-values (p < 0.05), so we reject H0. Thus, the Academic Level has a significant joint effect on the four response variables (Average Daily Usage Hours, Sleep Hours Per Night, Mental Health Score, and Addicted Score).
+
+### Assumptions
+
+```{r}
+check.mvnorm.plot <- function(data) {
+  data <- as.matrix(data)
+  
+  d2 <- numeric(nrow(data))
+  
+  xbar <- colMeans(data)
+  S <- cov(data)
+  
+  for (i in 1:nrow(data)) {
+    diff <- as.matrix(data[i, ] - xbar)
+    d2[i] <- t(diff) %*% solve(S) %*% diff
+  }
+  
+  p <- ((1:nrow(data)) - 0.5) / nrow(data)
+  
+  plot(
+    qchisq(p, df = ncol(data)),
+    sort(d2),
+    ylab = "D^2 Values",
+    xlab = "Theoretical Chi-Square Quantiles",
+    main = "Chi-Square Probability Plot"
+  )
+  
+  abline(0, 1)
+}
+
+highschool <- df |>
+  filter(Academic_Level == "High School") |>
+  select(Avg_Daily_Usage_Hours, Sleep_Hours_Per_Night, Mental_Health_Score, Addicted_Score)
+
+undergrad <- df |>
+  filter(Academic_Level == "Undergraduate") |>
+  select(Avg_Daily_Usage_Hours, Sleep_Hours_Per_Night, Mental_Health_Score, Addicted_Score)
+
+graduate <- df |>
+  filter(Academic_Level == "Graduate") |>
+  select(Avg_Daily_Usage_Hours, Sleep_Hours_Per_Night, Mental_Health_Score, Addicted_Score)
+
+check.mvnorm.plot(highschool)
+check.mvnorm.plot(undergrad)
+check.mvnorm.plot(graduate)
+```
+
+We used Chi-square probability plots to assess multivariate normality within each academic level. The plots were fairly linear in the center, but there were noticeable deviations in the upper tails for two groups, suggesting some departure from multivariate normality due to heavy tails or possible outliers. Thus, the assumption appears to be approximately met, so this is good enough to go along with our analysis but we should be cautious of this.
+
+```{r}
+Box.M <- function(samp.covs, n) {
+  k <- length(n)
+  p <- nrow(samp.covs[[1]])
+  df <- n - 1
+  
+  S.dets <- numeric(k)
+  Sp <- matrix(0, nrow = p, ncol = p)
+  
+  for (i in 1:k) {
+    S.dets[i] <- det(samp.covs[[i]])
+    Sp <- Sp + df[i] * samp.covs[[i]]
+  }
+  
+  Sp <- Sp / sum(df)
+  det.Sp <- det(Sp)
+  
+  # compute log(M) directly to avoid overflow/underflow --- determinants were to small for original function so had to modify to this for it to work
+  logM <- sum((df / 2) * log(S.dets)) - (sum(df) / 2) * log(det.Sp)
+  
+  c <- (sum(1 / df) - 1 / sum(df)) *
+    ((2 * p^2 + 3 * p - 1) / (6 * (p + 1) * (k - 1)))
+  
+  u <- -2 * (1 - c) * logM
+  u.df <- 0.5 * (k - 1) * p * (p + 1)
+  p.value <- 1 - pchisq(u, u.df)
+  
+  return(list(u = u, p.value.u = p.value, chi.df = u.df))
+}
+
+samp.covs <- list(
+  cov(highschool),
+  cov(undergrad),
+  cov(graduate)
+)
+
+n <- c(
+  nrow(highschool),
+  nrow(undergrad),
+  nrow(graduate)
+)
+
+Box.M(samp.covs, n)
+```
+
+Box’s M test was conducted to evaluate the MANOVA assumption of equal covariance matrices across academic levels. The result was significant (u = 161.937, df = 20, p-value < 0.001), suggesting that the covariance matrices are not the same for all academic level groups. Therefore, this assumption is violated, and the MANOVA results should be interpreted with some caution.
+
+### Univariate ANOVA follow ups
+
+```{r}
+summary.aov(manova_fit)
+```
+
+Thanks to rejecting the null hypothesis for the MANOVA test we can perform follow-up univariate ANOVAs which showed that academic level had a significant effect on all four response variables.
+
+We did not meet our assumptions of equal population covariances for the MANOVA tests so we do need to keep that in mind and treat these results with caution.
+
+1. For average daily usage hours, there was a significant difference across academic levels (F(2, 702) = 6.2655, p = 0.002009), indicating that at least one academic level has a different mean daily social media usage time than another. 
+
+2. For sleep hours per night, there was also a significant difference across academic levels (F(2, 702) = 26.593, p = 7.368e-12), suggesting that average sleep duration is not the same for all academic groups. 
+
+3. Mental health score likewise differed significantly by academic level (F(2, 702) = 17.72, p = 3.108e-08), showing that at least one group has a different mean mental health score. 
+
+4. Finally, addiction score also showed a significant difference across academic levels (F(2, 702) = 17.114, p = 5.534e-08), indicating that average social media addiction score varies among the academic levels. 
+
+Overall, these results suggest that academic level is associated with differences in daily social media usage, sleep duration, mental health, and addiction score.
+
+
+
+## Research Question 2: 
+
+Which of the four dependent variables are most important in separating genders? 
+
+
+
+```{r}
+discrim <- function(Y, group){
+  Y <- data.matrix(Y)
+  group <- as.factor(group)
+  m1 <- manova(Y ~ group)
+  nu.h <- summary(m1)$stats[1]
+  p <- ncol(Y)
+  SS <- summary(m1)$SS
+  E.inv.H <- solve(SS$Residuals) %*% SS$group
+  eig <- eigen(E.inv.H)
+  s <- min(nu.h, p)
+  lambda <- Re(eig$values[1:s])
+  a <- Re(eig$vectors[, 1:s])
+  a.star <- sqrt(diag(SS$Residuals)) * a
+  return(list("lambda" = lambda, "a" = a, "a.stand" = a.star))
+}
+
+Y <- df |>
+  select(
+    Avg_Daily_Usage_Hours,
+    Sleep_Hours_Per_Night,
+    Mental_Health_Score,
+    Addicted_Score
+  )
+
+disc_results <- discrim(Y, df$Gender)
+disc_results
+```
+
+We performed discriminant analysis to determine which of the four response variables were most important in separating genders. Because gender has two groups, only one discriminant function was obtained. Based on the standardized discriminant coefficients, Avg_Daily_Usage_Hours was the most important variable in distinguishing between genders, with a much larger coefficient in magnitude than the other variables. Mental_Health_Score and Sleep_Hours_Per_Night also contributed to the separation, but to a much smaller extent, while Addicted_Score contributed the least.
+
+```{r}
+library(MASS)
+
+# Test significance of discriminant functions
+discr.sig <- function(Y, group){
+  Y <- data.matrix(Y)
+  group <- as.factor(group)
+  m1 <- manova(Y ~ group)
+  sums <- summary(m1)
+  evals <- sums$Eigenvalues
+  nu.e <- m1$df
+  nu.h <- m1$rank - 1
+  k <- nu.h + 1
+  p <- ncol(m1$coef)
+  N <- nu.e + nu.h + 1
+  s <- min(p, nu.h)
+  lam <- numeric(s)
+  dfs <- numeric(s)
+  
+  for(m in 1:s){
+    lam[m] <- prod(1 / (1 + evals[m:s]))
+    dfs[m] <- (p - m + 1) * (k - m)
+  }
+  
+  V <- -(N - 1 - 0.5 * (p + k)) * log(lam)
+  p.val <- 1 - pchisq(V, dfs)
+  out <- cbind(Lambda = lam, V = V, p.values = p.val)
+  dimnames(out)[[1]] <- paste("LD", 1:s, sep = "")
+  return(out)
+}
+
+# Test significance of additional variables
+partial.F <- function(Y, group){
+  Y <- data.matrix(Y)
+  group <- as.factor(group)
+  p <- ncol(Y)
+  m1 <- manova(Y ~ group)
+  nu.e <- m1$df
+  nu.h <- m1$rank - 1
+  Lambda.p <- summary(m1, test = "Wilks")$stats[3]
+  Lambda.p1 <- numeric(p)
+  
+  for(i in 1:p){
+    dat <- data.matrix(Y[, -i])
+    m2 <- manova(dat ~ group)
+    Lambda.p1[i] <- summary(m2, test = "Wilks")$stats[3]
+  }
+  
+  Lambda <- Lambda.p / Lambda.p1
+  F.stat <- ((1 - Lambda) / Lambda) * ((nu.e - p + 1) / nu.h)
+  p.val <- 1 - pf(F.stat, nu.h, nu.e - p + 1)
+  out <- cbind(Lambda = Lambda, F.stat = F.stat, p.value = p.val)
+  dimnames(out)[[1]] <- dimnames(Y)[[2]]
+  ord <- rev(order(out[, 2]))
+  return(out[ord, ])
+}
+
+# Calculate coefficients for linear classification functions
+lin.class <- function(Y, group){
+  Y <- data.matrix(Y)
+  group <- as.factor(group)
+  p <- ncol(Y)
+  m1 <- manova(Y ~ group)
+  nu.e <- m1$df
+  Sp <- summary(m1)$SS$Residual / nu.e
+  cio <- 1:m1$rank
+  c.mat <- matrix(0, nrow = m1$rank, ncol = p)
+  
+  for (i in 1:m1$rank) {
+    cio[i] <- -0.5 * t(lda(Y, group)$means[i, ]) %*% solve(Sp) %*% lda(Y, group)$means[i, ]
+    c.mat[i, ] <- t(lda(Y, group)$means[i, ]) %*% solve(Sp)
+  }
+  
+  return(list("coefs" = c.mat, "c.not" = cio))
+}
+
+# Calculate classification and error rates
+rates <- function(data, group, method = "l") {
+  data <- as.matrix(data)
+  group <- as.matrix(group)
+  da.obj <- lda(data, group)
+  
+  if (method == "q") {
+    da.obj <- qda(data, group)
+    method <- "QDA"
+  }
+  
+  tab <- table(original = group, predicted = predict(da.obj)$class)
+  
+  if (method == "l") method <- "LDA"
+  
+  cor.rate <- sum(predict(da.obj)$class == group) / nrow(data)
+  er.rate <- 1 - cor.rate
+  
+  return(list(
+    "Correct Class Rate" = cor.rate,
+    "Error Rate" = er.rate,
+    "Method" = method,
+    "Confusion Matrix" = tab
+  ))
+}
+
+
+disc_sig_results <- discr.sig(Y, df$Gender)
+partialF_results <- partial.F(Y, df$Gender)
+linclass_results <- lin.class(Y, df$Gender)
+rate_results <- rates(Y, df$Gender)
+
+disc_sig_results
+partialF_results
+linclass_results
+rate_results
+```
+
+The partial F statistics also suggest that none of the individual variables contributes significantly to distinguishing genders. Although Avg_Daily_Usage_Hours had the largest partial F statistic (F = 2.391886113, p-value = 0.1224184), it was still not statistically significant. Sleep_Hours_Per_Night, Mental_Health_Score, and Addicted_Score had even smaller partial F statistics and very large p-values, indicating little evidence that they help separate genders
+
+The classification results further support this conclusion. The linear discriminant analysis correctly classified 53.19149% of observations, with an error rate of 46.80851%. This classification accuracy is only slightly better than chance, suggesting that gender separation based on these four variables is weak.
+
+Overall, the discriminant analysis suggests that none of the four variables is a strong or statistically significant separator of gender in this dataset. While Avg_Daily_Usage_Hours appears to contribute the most relative to the other variables, its contribution is still modest, and the overall discriminant function is not significant.
