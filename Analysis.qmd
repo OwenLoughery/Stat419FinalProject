@@ -4,7 +4,6 @@ format: html
 editor: visual
 ---
 
-
 ```{r}
 library(tidyverse)
 
@@ -21,21 +20,27 @@ head(df)
 
 ## Research Question 1:
 
-Do daily usage hours, sleep duration, mental health score, and addiction score jointly 
-differ across academic levels?
+Do daily usage hours, sleep duration, mental health score, and addiction score jointly differ across academic levels?
 
 ### Hypothesis
 
-H0: μ1(vector) = μ2(vector) = μ3(vector)
+$$
+H_o: \vec{\mu_{1}} = \vec{\mu_{2}} = \vec{\mu_{3}} \text{ vs. } H_A: \text{At least two } \vec{\mu_{j}} \text{ differ for } j = {1,2,3}
+$$
 
-HA: At least two μj(vector) differ
+$$
+\mu_j =
+\begin{cases}
+\text{True mean Avg\_Daily\_Usage\_Hours for academic level } j \\
+\text{True mean Sleep\_Hours\_Per\_Night for academic level } j \\
+\text{True mean Mental\_Health\_Score for academic level } j \\
+\text{True mean Addicted\_Score for academic level } j
+\end{cases}
+$$
 
-μj = | True mean Avg_Daily_Usage_Hours   for academic level j |
-     | True mean Sleep_Hours_Per_Night   for academic level j |
-     | True mean Mental_Health_Score     for academic level j |
-     | True mean Addicted_Score          for academic level j |
-
-j = High School, Undergraduate, Graduate
+$$
+j \in \{\text{High School}, \text{Undergraduate}, \text{Graduate}\}
+$$
 
 ### MANOVA Test
 
@@ -56,7 +61,7 @@ summary(manova_fit, test = "Hotelling-Lawley")
 summary(manova_fit, test = "Roy")
 ```
 
-Based on the MANOVA results (e.g., Wilks’ Lambda / Pillai’s Trace, etc.), the approximate F values corresponding to the test statistics are all large resulting in small p-values (p < 0.05), so we reject H0. Thus, the Academic Level has a significant joint effect on the four response variables (Average Daily Usage Hours, Sleep Hours Per Night, Mental Health Score, and Addicted Score).
+Based on the MANOVA results (e.g., Wilks’ Lambda / Pillai’s Trace, etc.), the approximate F values corresponding to the test statistics are all large resulting in small p-values (p \< 0.05), so we reject $H_o$ Thus, Academic Level has a significant joint effect on the four response variables (Average Daily Usage Hours, Sleep Hours Per Night, Mental Health Score, and Addicted Score).
 
 ### Assumptions
 
@@ -123,7 +128,8 @@ Box.M <- function(samp.covs, n) {
   Sp <- Sp / sum(df)
   det.Sp <- det(Sp)
   
-  # compute log(M) directly to avoid overflow/underflow --- determinants were to small for original function so had to modify to this for it to work
+  # compute log(M) directly to avoid overflow/underflow --- 
+  #determinants were to small for original function so had to modify to this for it to work
   logM <- sum((df / 2) * log(S.dets)) - (sum(df) / 2) * log(det.Sp)
   
   c <- (sum(1 / df) - 1 / sum(df)) *
@@ -151,7 +157,7 @@ n <- c(
 Box.M(samp.covs, n)
 ```
 
-Box’s M test was conducted to evaluate the MANOVA assumption of equal covariance matrices across academic levels. The result was significant (u = 161.937, df = 20, p-value < 0.001), suggesting that the covariance matrices are not the same for all academic level groups. Therefore, this assumption is violated, and the MANOVA results should be interpreted with some caution.
+Box’s M test was conducted to evaluate the MANOVA assumption of equal covariance matrices across academic levels. The result was significant (u = 161.937, df = 20, p-value \< 0.001), suggesting that the covariance matrices are not the same for all academic level groups. Therefore, this assumption is violated, and the MANOVA results should be interpreted with some caution.
 
 ### Univariate ANOVA follow ups
 
@@ -163,171 +169,138 @@ Thanks to rejecting the null hypothesis for the MANOVA test we can perform follo
 
 We did not meet our assumptions of equal population covariances for the MANOVA tests so we do need to keep that in mind and treat these results with caution.
 
-1. For average daily usage hours, there was a significant difference across academic levels (F(2, 702) = 6.2655, p = 0.002009), indicating that at least one academic level has a different mean daily social media usage time than another. 
+1.  For average daily usage hours, there was a significant difference across academic levels (F(2, 702) = 6.2655, p = 0.002009), indicating that at least one academic level has a different mean daily social media usage time than another.
 
-2. For sleep hours per night, there was also a significant difference across academic levels (F(2, 702) = 26.593, p = 7.368e-12), suggesting that average sleep duration is not the same for all academic groups. 
+2.  For sleep hours per night, there was also a significant difference across academic levels (F(2, 702) = 26.593, p = 7.368e-12), suggesting that average sleep duration is not the same for all academic groups.
 
-3. Mental health score likewise differed significantly by academic level (F(2, 702) = 17.72, p = 3.108e-08), showing that at least one group has a different mean mental health score. 
+3.  Mental health score likewise differed significantly by academic level (F(2, 702) = 17.72, p = 3.108e-08), showing that at least one group has a different mean mental health score.
 
-4. Finally, addiction score also showed a significant difference across academic levels (F(2, 702) = 17.114, p = 5.534e-08), indicating that average social media addiction score varies among the academic levels. 
+4.  Finally, addiction score also showed a significant difference across academic levels (F(2, 702) = 17.114, p = 5.534e-08), indicating that average social media addiction score varies among the academic levels.
 
 Overall, these results suggest that academic level is associated with differences in daily social media usage, sleep duration, mental health, and addiction score.
 
+## Research Question 2:
 
+What underlying patterns exist among social media usage, sleep, mental health, and addiction, and do these variables group students into meaningful clusters?
 
-## Research Question 2: 
+### PCA
 
-Which of the four dependent variables are most important in separating genders? 
-
-
-
-```{r}
-discrim <- function(Y, group){
-  Y <- data.matrix(Y)
-  group <- as.factor(group)
-  m1 <- manova(Y ~ group)
-  nu.h <- summary(m1)$stats[1]
-  p <- ncol(Y)
-  SS <- summary(m1)$SS
-  E.inv.H <- solve(SS$Residuals) %*% SS$group
-  eig <- eigen(E.inv.H)
-  s <- min(nu.h, p)
-  lambda <- Re(eig$values[1:s])
-  a <- Re(eig$vectors[, 1:s])
-  a.star <- sqrt(diag(SS$Residuals)) * a
-  return(list("lambda" = lambda, "a" = a, "a.stand" = a.star))
-}
-
-Y <- df |>
-  select(
-    Avg_Daily_Usage_Hours,
-    Sleep_Hours_Per_Night,
-    Mental_Health_Score,
-    Addicted_Score
-  )
-
-disc_results <- discrim(Y, df$Gender)
-disc_results
-```
-
-We performed discriminant analysis to determine which of the four response variables were most important in separating genders. Because gender has two groups, only one discriminant function was obtained. Based on the standardized discriminant coefficients, Avg_Daily_Usage_Hours was the most important variable in distinguishing between genders, with a much larger coefficient in magnitude than the other variables. Mental_Health_Score and Sleep_Hours_Per_Night also contributed to the separation, but to a much smaller extent, while Addicted_Score contributed the least.
+We use PCA to reduce the dimensionality of the data while still keeping most of the information. Since the four variables are likely related, PCA helps summarize them into a smaller number of components that capture the main patterns in the data.
 
 ```{r}
-library(MASS)
-
-# Test significance of discriminant functions
-discr.sig <- function(Y, group){
-  Y <- data.matrix(Y)
-  group <- as.factor(group)
-  m1 <- manova(Y ~ group)
-  sums <- summary(m1)
-  evals <- sums$Eigenvalues
-  nu.e <- m1$df
-  nu.h <- m1$rank - 1
-  k <- nu.h + 1
-  p <- ncol(m1$coef)
-  N <- nu.e + nu.h + 1
-  s <- min(p, nu.h)
-  lam <- numeric(s)
-  dfs <- numeric(s)
-  
-  for(m in 1:s){
-    lam[m] <- prod(1 / (1 + evals[m:s]))
-    dfs[m] <- (p - m + 1) * (k - m)
-  }
-  
-  V <- -(N - 1 - 0.5 * (p + k)) * log(lam)
-  p.val <- 1 - pchisq(V, dfs)
-  out <- cbind(Lambda = lam, V = V, p.values = p.val)
-  dimnames(out)[[1]] <- paste("LD", 1:s, sep = "")
-  return(out)
+princomp.test <- function(pr.out){
+lambda <- pr.out$sdev^2
+n <- pr.out$n.obs
+p <- length(lambda)
+mult <- n - ((2*p + 11)/6)
+u <- matrix(0,p-1)
+df <- matrix(0,p-1)
+p.val <- matrix(0,p-1)
+for(k in 2:p){
+l.bar <- mean(lambda[(p-k+1):p])
+u[k-1] <- mult * (k*log(l.bar) - sum(log(lambda[(p-k+1):p])))
+df[k-1] <- .5*(k-1)*(k+2)
+p.val[k-1] <- 1 - pchisq(u[k-1], df[k-1])
 }
-
-# Test significance of additional variables
-partial.F <- function(Y, group){
-  Y <- data.matrix(Y)
-  group <- as.factor(group)
-  p <- ncol(Y)
-  m1 <- manova(Y ~ group)
-  nu.e <- m1$df
-  nu.h <- m1$rank - 1
-  Lambda.p <- summary(m1, test = "Wilks")$stats[3]
-  Lambda.p1 <- numeric(p)
-  
-  for(i in 1:p){
-    dat <- data.matrix(Y[, -i])
-    m2 <- manova(dat ~ group)
-    Lambda.p1[i] <- summary(m2, test = "Wilks")$stats[3]
-  }
-  
-  Lambda <- Lambda.p / Lambda.p1
-  F.stat <- ((1 - Lambda) / Lambda) * ((nu.e - p + 1) / nu.h)
-  p.val <- 1 - pf(F.stat, nu.h, nu.e - p + 1)
-  out <- cbind(Lambda = Lambda, F.stat = F.stat, p.value = p.val)
-  dimnames(out)[[1]] <- dimnames(Y)[[2]]
-  ord <- rev(order(out[, 2]))
-  return(out[ord, ])
+out <- cbind(lambda[1:(p-1)], p:2, rev(u), rev(df), rev(p.val))
+dimnames(out)[[2]] <- c("Eigenvalue", "k", "u","df","p-value")
+return(out)
 }
-
-# Calculate coefficients for linear classification functions
-lin.class <- function(Y, group){
-  Y <- data.matrix(Y)
-  group <- as.factor(group)
-  p <- ncol(Y)
-  m1 <- manova(Y ~ group)
-  nu.e <- m1$df
-  Sp <- summary(m1)$SS$Residual / nu.e
-  cio <- 1:m1$rank
-  c.mat <- matrix(0, nrow = m1$rank, ncol = p)
-  
-  for (i in 1:m1$rank) {
-    cio[i] <- -0.5 * t(lda(Y, group)$means[i, ]) %*% solve(Sp) %*% lda(Y, group)$means[i, ]
-    c.mat[i, ] <- t(lda(Y, group)$means[i, ]) %*% solve(Sp)
-  }
-  
-  return(list("coefs" = c.mat, "c.not" = cio))
-}
-
-# Calculate classification and error rates
-rates <- function(data, group, method = "l") {
-  data <- as.matrix(data)
-  group <- as.matrix(group)
-  da.obj <- lda(data, group)
-  
-  if (method == "q") {
-    da.obj <- qda(data, group)
-    method <- "QDA"
-  }
-  
-  tab <- table(original = group, predicted = predict(da.obj)$class)
-  
-  if (method == "l") method <- "LDA"
-  
-  cor.rate <- sum(predict(da.obj)$class == group) / nrow(data)
-  er.rate <- 1 - cor.rate
-  
-  return(list(
-    "Correct Class Rate" = cor.rate,
-    "Error Rate" = er.rate,
-    "Method" = method,
-    "Confusion Matrix" = tab
-  ))
-}
-
-
-disc_sig_results <- discr.sig(Y, df$Gender)
-partialF_results <- partial.F(Y, df$Gender)
-linclass_results <- lin.class(Y, df$Gender)
-rate_results <- rates(Y, df$Gender)
-
-disc_sig_results
-partialF_results
-linclass_results
-rate_results
 ```
 
-The partial F statistics also suggest that none of the individual variables contributes significantly to distinguishing genders. Although Avg_Daily_Usage_Hours had the largest partial F statistic (F = 2.391886113, p-value = 0.1224184), it was still not statistically significant. Sleep_Hours_Per_Night, Mental_Health_Score, and Addicted_Score had even smaller partial F statistics and very large p-values, indicating little evidence that they help separate genders
+```{r}
+pca_data <- df[, c(
+  "Avg_Daily_Usage_Hours",
+  "Sleep_Hours_Per_Night",
+  "Mental_Health_Score",
+  "Addicted_Score"
+)]
 
-The classification results further support this conclusion. The linear discriminant analysis correctly classified 53.19149% of observations, with an error rate of 46.80851%. This classification accuracy is only slightly better than chance, suggesting that gender separation based on these four variables is weak.
+pca_scaled = scale(pca_data)
+```
 
-Overall, the discriminant analysis suggests that none of the four variables is a strong or statistically significant separator of gender in this dataset. While Avg_Daily_Usage_Hours appears to contribute the most relative to the other variables, its contribution is still modest, and the overall discriminant function is not significant.
+```{r}
+pca_fit <- princomp(pca_scaled, cor = FALSE)
+summary(pca_fit)
+loadings(pca_fit)
+```
+
+```{r}
+princomp.test(pca_fit)
+```
+
+```{r}
+plot(pca_fit, type = "lines", main = "Scree Plot")
+```
+
+#### Results and interpretation
+
+The first principal component explains about 85.6% of the total variation, which means that most of the information in the data can be represented along a single dimension. The scree plot also shows a clear drop after the first component, supporting this conclusion.
+
+Looking at the ladings, the first principal component has positive contributions from average daily usage and addiction score, and negative contributions from sleep hours and mental health score. This suggests that the main pattern in the data reflects a contrast between higher usage and addiction versus lower sleep and poorer mental health.
+
+The second principal component explains much less variation, about 8.5%, and captures smaller differences between variables, mainly involving sleep and mental health. Since it contributes relatively little, the primary interpretation focuses on the first component.
+
+The PCA significance test shows very small p-values, indicating that the leading components are statistically meaningful and that reducing the data to fewer dimensions is appropriate.
+
+### Hierarchical Clustering
+
+Cluster analysis is used to group observations based on similarity across multiple variables. In this case, it helps identify whether there are distinct types of students with similar patterns of usage, sleep, mental health, and addiction.
+
+We use Euclidean distance on standardized variables so that each variable contributes equally. Complete linkage is applied because it forms more compact and interpretable clusters by considering the maximum distance between observations in different clusters.
+
+```{r}
+cluster_vars <- df[, c(
+  "Avg_Daily_Usage_Hours",
+  "Sleep_Hours_Per_Night",
+  "Mental_Health_Score",
+  "Addicted_Score"
+)]
+cluster_scaled <- scale(cluster_vars)
+```
+
+```{r}
+D <- round(dist(cluster_scaled), 2)
+D
+```
+
+```{r}
+dist_mat <- round(dist(cluster_scaled[1:5, ], diag = TRUE, upper = TRUE), 2)
+dist_mat
+```
+
+```{r}
+hc_fit <- hclust(dist(cluster_scaled), method = "complete")
+hc_fit
+```
+
+```{r}
+plot(hc_fit,
+     labels = FALSE,
+     ylab = "Maximum Distance Between Clusters",
+     main = "Dendrogram for Complete Linkage Clustering")
+
+rect.hclust(hc_fit, k = 3, border = "red")
+```
+
+```{r}
+plot(rev(hc_fit$height),
+     type = "b",
+     xlab = "Merge Step",
+     ylab = "Merge Distance",
+     main = "Merge Heights Plot")
+
+abline(v = 3, col = "red", lty = 2)
+```
+
+```{r}
+cluster_membership <- cutree(hc_fit, k = 3)
+table(cluster_membership)
+```
+
+
+The dendrogram suggests that dividing the data into three clusters provides a reasonable grouping. The clusters are also fairly balanced in size, with 217, 284, and 204 observations.
+
+Cluster 2 represents a lower-risk group, with lower usage and addiction scores and higher sleep and mental health values. Cluster 3 represents a higher-risk group, with higher usage and addiction along with lower sleep and poorer mental health. Cluster 1 falls in between and reflects a more moderate profile across all variables.
+
+Overall, the clusters show a clear pattern that aligns with the main direction identified in the PCA. Students tend to fall along a spectrum from lower-risk to higher-risk behavioral profiles.
